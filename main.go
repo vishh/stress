@@ -22,6 +22,7 @@ func main() {
 	glog.Infof("Allocating %q memory, in %q chunks, with a %v sleep between allocations", total.String(), stepSize.String(), *argSleepDuration)
 	allocateMemory(total, stepSize)
 	glog.Infof("Allocated %q memory", total.String())
+	select {}
 }
 
 func allocateMemory(total, stepSize resource.Quantity) {
