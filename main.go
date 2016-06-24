@@ -2,6 +2,9 @@ package main
 
 import (
 	"flag"
+	"io"
+	"io/ioutil"
+	"os"
 	"time"
 
 	"github.com/golang/glog"
@@ -9,20 +12,38 @@ import (
 )
 
 var (
-	argTotal         = flag.String("total", "0", "total memory to be consumed. Memory will be consumed via multiple allocations.")
-	argStepSize      = flag.String("alloc-size", "4Ki", "amount of memory to be consumed in each allocation")
-	argSleepDuration = flag.Duration("sleep", time.Millisecond, "duration to sleep between allocations")
-	buffer           [][]byte
+	argMemTotal         = flag.String("mem-total", "0", "total memory to be consumed. Memory will be consumed via multiple allocations.")
+	argMemStepSize      = flag.String("mem-alloc-size", "4Ki", "amount of memory to be consumed in each allocation")
+	argMemSleepDuration = flag.Duration("mem-alloc-sleep", time.Millisecond, "duration to sleep between allocations")
+	argCpus             = flag.Int("cpus", 0, "total number of CPUs to utilize")
+	buffer              [][]byte
 )
 
 func main() {
 	flag.Parse()
-	total := resource.MustParse(*argTotal)
-	stepSize := resource.MustParse(*argStepSize)
-	glog.Infof("Allocating %q memory, in %q chunks, with a %v sleep between allocations", total.String(), stepSize.String(), *argSleepDuration)
+	total := resource.MustParse(*argMemTotal)
+	stepSize := resource.MustParse(*argMemStepSize)
+	glog.Infof("Allocating %q memory, in %q chunks, with a %v sleep between allocations", total.String(), stepSize.String(), *argMemSleepDuration)
+	burnCPU()
 	allocateMemory(total, stepSize)
 	glog.Infof("Allocated %q memory", total.String())
 	select {}
+}
+
+func burnCPU() {
+	src, err := os.Open("/dev/zero")
+	if err != nil {
+		glog.Fatalf("failed to open /dev/zero")
+	}
+	for i := 0; i < *argCpus; i++ {
+		glog.Infof("Spawning a thread to consume CPU")
+		go func() {
+			_, err := io.Copy(ioutil.Discard, src)
+			if err != nil {
+				glog.Fatalf("failed to copy from /dev/zero to /dev/null: %v", err)
+			}
+		}()
+	}
 }
 
 func allocateMemory(total, stepSize resource.Quantity) {
@@ -32,6 +53,6 @@ func allocateMemory(total, stepSize resource.Quantity) {
 			newBuffer[i] = 0
 		}
 		buffer = append(buffer, newBuffer)
-		time.Sleep(*argSleepDuration)
+		time.Sleep(*argMemSleepDuration)
 	}
 }

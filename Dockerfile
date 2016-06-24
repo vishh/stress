@@ -1,6 +1,6 @@
 FROM scratch
 MAINTAINER vishnuk@google.com
 
-ADD memstress /
+ADD stress /
 
-ENTRYPOINT ["/memstress", "-logtostderr"]
+ENTRYPOINT ["/stress", "-logtostderr"]
