@@ -8,24 +8,32 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"k8s.io/kubernetes/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
-	argMemTotal         = flag.String("mem-total", "0", "total memory to be consumed. Memory will be consumed via multiple allocations.")
-	argMemStepSize      = flag.String("mem-alloc-size", "4Ki", "amount of memory to be consumed in each allocation")
-	argMemSleepDuration = flag.Duration("mem-alloc-sleep", time.Millisecond, "duration to sleep between allocations")
-	argCpus             = flag.Int("cpus", 0, "total number of CPUs to utilize")
-	buffer              [][]byte
+	argMemTotal             = flag.String("mem-total", "0", "total memory to be consumed. Memory will be consumed via multiple allocations.")
+	argMemStepSize          = flag.String("mem-alloc-size", "4Ki", "amount of memory to be consumed in each allocation")
+	argMemSleepDuration     = flag.Duration("mem-alloc-sleep", time.Millisecond, "duration to sleep between allocations")
+	argMemInitialAllocation = flag.String("init-alloc-size", "0", "memory to allocate in a single chunk before allocating step sizes according to sleep duration")
+	argCpus                 = flag.Int("cpus", 0, "total number of CPUs to utilize")
+	buffer                  [][]byte
 )
 
 func main() {
 	flag.Parse()
 	total := resource.MustParse(*argMemTotal)
 	stepSize := resource.MustParse(*argMemStepSize)
+	initialAllocation := resource.MustParse(*argMemInitialAllocation)
 	glog.Infof("Allocating %q memory, in %q chunks, with a %v sleep between allocations", total.String(), stepSize.String(), *argMemSleepDuration)
 	burnCPU()
-	allocateMemory(total, stepSize)
+	if !initialAllocation.IsZero() {
+		glog.Infof("Allocating %q initial memory")
+		allocateMemory(initialAllocation, stepSize, 0*time.Millisecond)
+	}
+	remainingAllocation := total.DeepCopy()
+	remainingAllocation.Sub(initialAllocation)
+	allocateMemory(remainingAllocation, stepSize, *argMemSleepDuration)
 	glog.Infof("Allocated %q memory", total.String())
 	select {}
 }
@@ -46,13 +54,13 @@ func burnCPU() {
 	}
 }
 
-func allocateMemory(total, stepSize resource.Quantity) {
+func allocateMemory(total, stepSize resource.Quantity, sleepDuration time.Duration) {
 	for i := int64(1); i*stepSize.Value() <= total.Value(); i++ {
 		newBuffer := make([]byte, stepSize.Value())
 		for i := range newBuffer {
 			newBuffer[i] = 0
 		}
 		buffer = append(buffer, newBuffer)
-		time.Sleep(*argMemSleepDuration)
+		time.Sleep(sleepDuration)
 	}
 }
